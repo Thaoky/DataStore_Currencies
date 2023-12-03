@@ -1,0 +1,21 @@
+DataStore Changelog (dates in dd/mm/yyyy)
+===================
+
+
+Version 2023.11.08 (08/11/2023)
+
+- Added the Dream Infusion currency.
+
+Version 2023.11.08 (08/11/2023)
+
+- Added the Emerald Dewrop currency.
+
+Version 2023.11.06 (06/11/2023)
+
+- ToC Update for 10.2
+
+Version 2023.05.18 (18/05/2023)
+
+- As of this version, this DataStore module will be released in a single package compatible with all versions of the game.
+- As of this version, the version number will no longer be 1.x or 9.x, but rather a date that clearly identifies when the release took place.
+
