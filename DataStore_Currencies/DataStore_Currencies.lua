@@ -45,15 +45,8 @@ local AddonDB_Defaults = {
 
 -- *** Utility functions ***
 local bAnd = bit.band
-
-local function LeftShift(value, numBits)
-	return value * (2 ^ numBits)
-end
-
-local function RightShift(value, numBits)
-	-- for bits beyond bit 31
-	return math.floor(value / 2^numBits)
-end
+local LeftShift = DataStore.LeftShift
+local RightShift = DataStore.RightShift
 
 local headersState
 local headerCount

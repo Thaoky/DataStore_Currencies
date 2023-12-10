@@ -2,6 +2,10 @@ DataStore Changelog (dates in dd/mm/yyyy)
 ===================
 
 
+Version 2023.12.10 (10/12/2023)
+
+- LeftShift & RightShift now use the DataStore version.
+
 Version 2023.11.08 (08/11/2023)
 
 - Added the Dream Infusion currency.
