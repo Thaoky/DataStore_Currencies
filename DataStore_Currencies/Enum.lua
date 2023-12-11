@@ -47,6 +47,7 @@ enum.CurrencyIDs = {
 	SealOfBrokenFate = 1273,
 	SightlessEye = 1149,
 	AncientMana = 1155,
+	VeiledArgunite = 1508,
 	
 	-- Battle for Azeroth
 	WarResources = 1560,
