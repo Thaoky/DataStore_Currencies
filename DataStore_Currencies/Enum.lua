@@ -94,4 +94,5 @@ enum.CurrencyIDs = {
 	AspectsDreamingCrest = 2709,
 	EmeraldDewdrop = 2650,
 	DreamInfusion = 2777,
+	MysteriousFragment = 2657, -- This is the only currency so far, didn't want to place in a separate tab
 }
