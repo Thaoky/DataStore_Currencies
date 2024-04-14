@@ -1,15 +1,13 @@
-## Interface: 100205
+## Interface: 100206
 ## Title: DataStore_Currencies
 ## IconTexture: Interface\Icons\garrison_building_storehouse
 
 ## Notes: Stores information about character currencies
 ## Author: Thaoky (EU-Marécages de Zangar)
-## Version: 2024.01.31
+## Version: 2024.04.14
 ## Dependencies: DataStore
-## OptionalDeps: Ace3
-## SavedVariables: DataStore_CurrenciesDB
+## SavedVariables: DataStore_Currencies_Characters, DataStore_Currencies_Catalog, DataStore_Currencies_Info, DataStore_Currencies_Max, DataStore_Currencies_Headers, DataStore_Currencies_Archeology 
 ## X-Category: Interface Enhancements
-## X-Embeds: Ace3
 
 Enum.lua
 DataStore_Currencies.lua

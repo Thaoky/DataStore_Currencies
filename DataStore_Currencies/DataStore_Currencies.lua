@@ -4,54 +4,26 @@ July 6th, 2009
 --]]
 if not DataStore then return end
 
-local addonName = "DataStore_Currencies"
+local addonName, addon = ...
+local thisCharacter
+local thisCharacterArcheology
+local currenciesCatalog
+local currenciesHeaders
+local currenciesInfo
+local currenciesMax
 
-_G[addonName] = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceConsole-3.0", "AceEvent-3.0")
-
-local addon = _G[addonName]
+local DataStore = DataStore
+local TableInsert, strsplit, tonumber, ipairs, C_CurrencyInfo = table.insert, strsplit, tonumber, ipairs, C_CurrencyInfo
+local GetCurrencyListSize, GetCurrencyListInfo, ExpandCurrencyList, GetNumArchaeologyRaces, GetArchaeologyRaceInfo = GetCurrencyListSize, GetCurrencyListInfo, ExpandCurrencyList, GetNumArchaeologyRaces, GetArchaeologyRaceInfo
+local isRetail = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
 
 local enum = DataStore.Enum.CurrencyIDs
-
--- TODO: Deprecated, enums are used with GetCurrencyTotals, also deprecate the specific methods below
-local CURRENCY_ID_JUSTICE = 395
-local CURRENCY_ID_VALOR = 1191
-local CURRENCY_ID_APEXIS = 823
-local CURRENCY_ID_GARRISON = 824
-local CURRENCY_ID_SOTF = 994		-- Seals of Tempered Fate (WoD)
-local CURRENCY_ID_ORDER_HALL = 1220
-local CURRENCY_ID_SOBF = 1273		-- Seals of the Broken Fate (Legion)
-
-
-
-local AddonDB_Defaults = {
-	global = {
-		Reference = {
-			Currencies = {},			-- ex: [1] = "Dungeon and Raid", [2] = "Justice Points", ...
-			CurrencyTextRev = {},	-- reverse lookup
-
-			Headers = {},			-- ex: [1] = "Dungeon and Raid", [2] = "Miscellaneous", ...
-			HeadersRev = {},		-- reverse lookup of Headers
-		},
-		Characters = {
-			['*'] = {				-- ["Account.Realm.Name"] 
-				lastUpdate = nil,
-				Currencies = {},
-				CurrencyInfo = {},
-				Archeology = {},
-			}
-		}
-	}
-}
-
--- *** Utility functions ***
-local bAnd = bit.band
-local LeftShift = DataStore.LeftShift
-local RightShift = DataStore.RightShift
+local bit64 = LibStub("LibBit64")
 
 local headersState
 local headerCount
 
-local function SaveHeaders_Common()
+local function SaveHeaders_Retail()
 	headersState = {}
 	headerCount = 0		-- use a counter to avoid being bound to header names, which might not be unique.
 	
@@ -67,7 +39,7 @@ local function SaveHeaders_Common()
 	end
 end
 
-local function RestoreHeaders_Common()
+local function RestoreHeaders_Retail()
 	headerCount = 0
 	for i = C_CurrencyInfo.GetCurrencyListSize(), 1, -1 do
 		local info = C_CurrencyInfo.GetCurrencyListInfo(i)
@@ -82,7 +54,7 @@ local function RestoreHeaders_Common()
 	headersState = nil
 end
 
-local function SaveHeaders_Wrath()
+local function SaveHeaders_NonRetail()
 	headersState = {}
 	headerCount = 0		-- use a counter to avoid being bound to header names, which might not be unique.
 	
@@ -98,7 +70,7 @@ local function SaveHeaders_Wrath()
 	end
 end
 
-local function RestoreHeaders_Wrath()
+local function RestoreHeaders_NonRetail()
 	headerCount = 0
 	for i = GetCurrencyListSize(), 1, -1 do
 		local _, isHeader = GetCurrencyListInfo(i)
@@ -113,69 +85,51 @@ local function RestoreHeaders_Wrath()
 end
 
 local function RegisterHeader(name)
-	local ref = addon.db.global.Reference
-
-	-- if this header is not yet referenced ..
-	if not ref.HeadersRev[name] then
-	
-		table.insert(ref.Headers, name)			-- ex: [1] = "Shadowlands"
-		ref.HeadersRev[name] = #ref.Headers		-- ["Shadowlands"] = 1
-	end
-	
-	return ref.HeadersRev[name]			-- return this header's index
+	return DataStore:StoreToSetAndList(currenciesHeaders, name)
 end
 
-local function RegisterCurrency(name, iconFileID)
-	local ref = addon.db.global.Reference
+local function RegisterCurrency(name, id)
+	-- ["Nethershard"] = 28
+	local currencyIndex = DataStore:StoreToSetAndList(currenciesCatalog, name)
 	
-	-- if this currency is not yet referenced ..
-	if not ref.CurrencyTextRev[name] then
+	-- [28] = 132775
+	-- iconFileID in retail, itemID in non-retail
+	currenciesInfo[currencyIndex] = id 
 	
-		table.insert(ref.Currencies, format("%s|%s", name, iconFileID or ""))	-- ex; [28] = "Nethershard|132775"
-		ref.CurrencyTextRev[name] = #ref.Currencies										-- ["Nethershard"] = 28
-	end
-	
-	return ref.CurrencyTextRev[name]		-- return this currency's index
+	return currencyIndex
 end
 
-local function SaveCurrency(character, categoryIndex, currencyIndex, count)
-	-- 07/01/2021 : Changed bit layout to better fit future additions
+local function SaveCurrency(categoryIndex, currencyIndex, count)
+	local attrib = categoryIndex					-- bit  0-7 : parent category index, 8 bits = 256 values
+		+ bit64:LeftShift(currencyIndex, 8)		-- bits 8-17 : currency index, 10 bits = 1024 values
+		+ bit64:LeftShift(count, 18)				-- bits 18+ : Item count
 	
-	-- bit  0-6 : parent category index, 7 bits = 128 values, should be safe for a while ..
-	local attrib = categoryIndex
-		
-	-- bits 7-16 : currency index, 10 bits = 1024 values, should leave room for some time too ..
-	attrib = attrib + LeftShift(currencyIndex, 7)
-	
-	-- bits 17- : Item count
-	attrib = attrib + LeftShift(count, 17)
-
-	table.insert(character.Currencies, attrib)
+	TableInsert(thisCharacter.Currencies, attrib)
 end
 
 
 -- *** Scanning functions ***
-local function ScanCurrencyTotals(id, divWeekly, divTotal)
-	local denomWeekly = divWeekly or 1
-	local denomTotal = divTotal or 1
-	
+local function ScanCurrencyTotals(id)
 	local info = C_CurrencyInfo.GetCurrencyInfo(id)
+	if not info then return end
 	
-	addon.ThisCharacter.CurrencyInfo[id] = format("%s-%s-%s-%s", 
-		info.quantity or 0, 
-		info.quantityEarnedThisWeek or 0, 
-		math.floor(info.maxWeeklyQuantity / denomWeekly) or 0, 
-		math.floor(info.maxQuantity / denomTotal) or 0)
+	local char = thisCharacter
+	char.Totals = char.Totals or {}
+	
+	char.Totals[id] = info.quantity								-- bits 0-19 = quantity
+		+ bit64:LeftShift(info.quantityEarnedThisWeek, 20)	-- bits 20+ = quantity earned this week
+	
+	currenciesMax[id] = info.maxQuantity						-- bits 0-19 = max quantity
+		+ bit64:LeftShift(info.maxWeeklyQuantity, 20)		-- bits 20+ = max quantity per week
 end
 
-local function ScanCurrencies_Common()
-	SaveHeaders_Common()
+local function ScanCurrencies_Retail()
+	SaveHeaders_Retail()
 	
-	local char = addon.ThisCharacter
+	local char = thisCharacter
 	wipe(char.Currencies)
 	
 	local categoryIndex = 0
-	local currencyIndex = 0
 	
 	for i = 1, C_CurrencyInfo.GetCurrencyListSize() do
 		local info = C_CurrencyInfo.GetCurrencyListInfo(i)
@@ -183,8 +137,8 @@ local function ScanCurrencies_Common()
 		if info.isHeader then
 			categoryIndex = RegisterHeader(info.name)
 		else
-			currencyIndex = RegisterCurrency(info.name, info.iconFileID)
-			SaveCurrency(char, categoryIndex, currencyIndex, info.quantity)
+			local currencyIndex = RegisterCurrency(info.name, info.iconFileID)
+			SaveCurrency(categoryIndex, currencyIndex, info.quantity)
 			
 			-- If the currency has a link, we can scan its totals
 			local link = C_CurrencyInfo.GetCurrencyListLink(i)
@@ -194,58 +148,64 @@ local function ScanCurrencies_Common()
 		end
 	end
 	
-	RestoreHeaders_Common()
+	RestoreHeaders_Retail()
 	
 	char.lastUpdate = time()
 end
 
-local function ScanCurrencies_Wrath()
-	SaveHeaders_Wrath()
+local function ScanCurrencies_NonRetail()
+	SaveHeaders_NonRetail()
 	
-	local currencies = addon.ThisCharacter.Currencies
+	local char = thisCharacter
+	local currencies = char.Currencies
 	wipe(currencies)
+	
+	local categoryIndex = 0
 	
 	for i = 1, GetCurrencyListSize() do
 		local name, isHeader, _, _, _, count, _, _, _, _, _, itemID = GetCurrencyListInfo(i)
 
 		name = name or ""
 		if isHeader then
-			currencies[i] = "0|" .. name
+			-- currencies[i] = format("0|%s", name)
+			categoryIndex = RegisterHeader(info.name)
 		else
-			currencies[i] = "1|" .. name .. "|" .. (count or 0) .. "|" .. (itemID or 0)
+			-- currencies[i] = format("1|%s|%d|%d", name, count or 0, itemID or 0)
+			
+			local currencyIndex = RegisterCurrency(name, itemID or 0)
+			SaveCurrency(categoryIndex, currencyIndex, count or 0)
 		end
 	end
 	
-	RestoreHeaders_Wrath()
+	RestoreHeaders_NonRetail()
 	
-	addon.ThisCharacter.lastUpdate = time()
+	char.lastUpdate = time()
 end
 
-local ScanCurrencies = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE) and ScanCurrencies_Common or ScanCurrencies_Wrath
+local ScanCurrencies = isRetail and ScanCurrencies_Retail or ScanCurrencies_NonRetail
 
 local function ScanReservoirCurrencies()
-	local char = addon.ThisCharacter
-	
 	-- ** 9.0 Anima Currency **
 	local currencyID = C_CovenantSanctumUI.GetAnimaInfo()
 	local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
 
 	local categoryIndex = RegisterHeader(EXPANSION_NAME8)		-- Get the category index for "Shadowlands"
 	local currencyIndex = RegisterCurrency(info.name, info.iconFileID)
-	SaveCurrency(char, categoryIndex, currencyIndex, info.quantity)
+	
+	SaveCurrency(categoryIndex, currencyIndex, info.quantity)
 	
 	-- ** 9.0 Redeemed Soul Currency **
 	for _, currencyID in ipairs(C_CovenantSanctumUI.GetSoulCurrencies()) do
     	info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
 		currencyIndex = RegisterCurrency(info.name, info.iconFileID)
-		SaveCurrency(char, categoryIndex, currencyIndex, info.quantity)
+		SaveCurrency(categoryIndex, currencyIndex, info.quantity)
 		ScanCurrencyTotals(currencyID)
 	end	
 end
 
 local function ScanArcheology()
-	local currencies = addon.ThisCharacter.Archeology
-	wipe(currencies)
+	thisCharacterArcheology = thisCharacterArcheology or {}
+	local currencies = thisCharacterArcheology
 	
 	for i = 1, GetNumArchaeologyRaces() do
 		-- Warning for extreme caution here: while testing MoP, the following line of code triggered an error while trying to activate a glyph.
@@ -254,9 +214,8 @@ local function ScanArcheology()
 		-- At first sight, the problem seems to come from addressing the table element direcly, same has happened in DataStore_Stats.
 		
 		local _, _, _, n = GetArchaeologyRaceInfo(i)
-		currencies[i] = n
+		currencies[i] = n > 0 and n or nil
 	end
-
 end
 
 -- *** Event Handlers ***
@@ -267,7 +226,7 @@ end
 local function OnCurrencyDisplayUpdate()
 	ScanCurrencies()
 	
-	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+	if isRetail then
 		ScanArcheology()
 	end
 end
@@ -293,7 +252,7 @@ end
 -- ** Mixins **
 local function _GetCurrencyHeaders()
 	-- return all referenced headers, but in a sorted array
-	return DataStore:SortedArrayClone(addon.db.global.Reference.Headers)
+	return DataStore:SortedArrayClone(currenciesHeaders.List)
 end
 
 local function _GetNumCurrencies(character)
@@ -301,54 +260,53 @@ local function _GetNumCurrencies(character)
 end
 
 local function _GetCurrencyInfo(character, index)
-	local ref = addon.db.global.Reference
 	local currency = character.Currencies[index]
 	
-	local catIndex = bAnd(currency, 127)
-	local refIndex = bAnd(RightShift(currency, 7), 1023)
-	local count = RightShift(currency, 17)
-
-	local info = ref.Currencies[refIndex]
-	local name, icon = strsplit("|", info or "")
-	local category = ref.Headers[catIndex]
+	local categoryIndex = bit64:GetBits(currency, 0, 8)		-- bit  0-7 : parent category index, 8 bits = 256 values
+	local currencyIndex = bit64:GetBits(currency, 8, 10)		-- bits 8-17 : currency index, 10 bits = 1024 values
+	local count = bit64:RightShift(currency, 18)			-- bits 18+ : Item count
 	
-	return name, count, icon, category
+	return currenciesCatalog.List[currencyIndex],	-- name
+		count,
+		currenciesInfo[currencyIndex],					-- iconID / itemID
+		currenciesHeaders.List[categoryIndex]			-- category
 end
 
-local function _GetCurrencyInfo_Wrath(character, index)
-	local currency = character.Currencies[index]
-	local isHeader, name, count, itemID = strsplit("|", currency)
+-- normally not necessary anymore, needs testing
+-- local function _GetCurrencyInfo_NonRetail(character, index)
+	-- local currency = character.Currencies[index]
+	-- local isHeader, name, count, itemID = strsplit("|", currency)
 	
-	isHeader = (isHeader == "0" and true or nil)
+	-- isHeader = (isHeader == "0" and true or nil)
 	
-	return isHeader, name, tonumber(count), tonumber(itemID)
-end
+	-- return isHeader, name, tonumber(count), tonumber(itemID)
+-- end
 
 local function _GetCurrencyInfoByName(character, token)
-	local ref = addon.db.global.Reference
-	
+
 	for i = 1, #character.Currencies do
-		local name, count, icon, category = _GetCurrencyInfo(character, i)
+		local name, count, info, category = _GetCurrencyInfo(character, i)
 	
 		if name == token then
-			return name, count, icon, category
+			return name, count, info, category
 		end
 	end
 end
 
-local function _GetCurrencyInfoByName_Wrath(character, token)
-	local name, count, itemID
+-- normally not necessary anymore, needs testing
+-- local function _GetCurrencyInfoByName_NonRetail(character, token)
+	-- local name, count, itemID
 	
-	for i = 1, #character.Currencies do
-		_, name, count, itemID = strsplit("|", character.Currencies[i])
+	-- for i = 1, #character.Currencies do
+		-- _, name, count, itemID = strsplit("|", character.Currencies[i])
 
-		if name == token then	-- if it's the token we're looking for, return
-			return tonumber(count), tonumber(itemID)
-		end
-	end
-end
+		-- if name == token then	-- if it's the token we're looking for, return
+			-- return tonumber(count), tonumber(itemID)
+		-- end
+	-- end
+-- end
 
-local function _GetCurrencyItemCount(character, searchedID)
+local function _GetCurrencyItemCount_Retail(character, searchedID)
 	local _, count = _GetCurrencyInfo(character, searchedID)
 	
 	return count
@@ -386,7 +344,7 @@ local currencyIDs = {
 	[37836] = true,		-- venture coin
 }
 
-local function _GetCurrencyItemCount_Wrath(character, searchedID)
+local function _GetCurrencyItemCount_NonRetail(character, searchedID)
 	if currencyIDs[searchedID] then
 		local isHeader, currencyCount, itemID
 		
@@ -404,204 +362,70 @@ local function _GetCurrencyItemCount_Wrath(character, searchedID)
 	return 0
 end
 
-local function _GetArcheologyCurrencyInfo(character, index)
-	return character.Archeology[index] or 0
-end
-
 local function _GetCurrencyTotals(character, id)
-	local info = character.CurrencyInfo[id]
-	if not info then
-		return 0, 0, 0, 0
+	local info = character.Totals[id]
+	local maxInfo = currenciesMax[id]
+	
+	if info and maxInfo then
+		return bit64:GetBits(info, 0, 20),		-- bits 0-19 = quantity
+			bit64:RightShift(info, 20),			-- bits 20+ = quantity earned this week	
+			bit64:GetBits(maxInfo, 0, 20),		-- bits 0-19 = max quantity
+			bit64:RightShift(maxInfo, 20)			-- bits 20+ = max quantity per week
 	end
 	
-	local amount, earnedThisWeek, weeklyMax, totalMax = strsplit("-", info)
-	return tonumber(amount), tonumber(earnedThisWeek), tonumber(weeklyMax), tonumber(totalMax)
+	return 0, 0, 0, 0
 end
 
-local function _GetJusticePoints(character)
-	return _GetCurrencyTotals(character, CURRENCY_ID_JUSTICE)
-end
-
-local function _GetValorPoints(character)
-	return _GetCurrencyTotals(character, CURRENCY_ID_VALOR)
-end
-
-local function _GetValorPointsPerWeek(character)
-	local info = character.CurrencyInfo[CURRENCY_ID_VALOR]
-	if not info then
-		return 0
-	end
+DataStore:OnAddonLoaded(addonName, function()
+	DataStore:RegisterModule({
+		addon = addon,
+		addonName = addonName,
+		rawTables = {
+			"DataStore_Currencies_Catalog",		-- Set & List of currencies
+			"DataStore_Currencies_Headers",		-- Set & List of category headers
+			"DataStore_Currencies_Info",			-- [id] = iconFileID (retail) or = itemID (non-retail)
+			"DataStore_Currencies_Max",			-- [id] = max quantity & max quantity per week
+		},
+		characterTables = {
+			["DataStore_Currencies_Characters"] = {
+				GetNumCurrencies = _GetNumCurrencies,
+				GetCurrencyInfo = _GetCurrencyInfo,
+				GetCurrencyInfoByName = _GetCurrencyInfoByName,
+				GetCurrencyItemCount = isRetail and _GetCurrencyItemCount_Retail or _GetCurrencyItemCount_NonRetail,
+				GetCurrencyTotals = isRetail and _GetCurrencyTotals,
+			},
+			["DataStore_Currencies_Archeology"] = {
+				GetArcheologyCurrencyInfo = isRetail and function(character, index)
+					return character[index] or 0
+				end,
+			},
+		}
+	})
 	
-	local _, earnedThisWeek = strsplit("-", info)
-	return tonumber(earnedThisWeek)
-end
-
-local function _GetGarrisonResources(character)
-	return _GetCurrencyTotals(character, CURRENCY_ID_GARRISON)
-end
-
-local function _GetApexisCrystals(character)
-	return _GetCurrencyTotals(character, CURRENCY_ID_APEXIS)
-end
-
-local function _GetSealsOfFate(character)
-	return _GetCurrencyTotals(character, CURRENCY_ID_SOTF)
-end
-
-local function _GetSealsOfBrokenFate(character)
-	return _GetCurrencyTotals(character, CURRENCY_ID_SOBF)
-end
-
-local function _GetOrderHallResources(character)
-	return _GetCurrencyTotals(character, CURRENCY_ID_ORDER_HALL)
-end
-
-local function _GetNethershards(character)
-	return _GetCurrencyTotals(character, enum.Nethershard)
-end
-
-local function _GetWarSupplies(character)
-	return _GetCurrencyTotals(character, enum.LegionfallWarSupplies)
-end
-
-local function _GetBfAWarResources(character)
-	return _GetCurrencyTotals(character, enum.WarResources)
-end
-
-local function _GetBfASealsOfWartornFate(character)
-	return _GetCurrencyTotals(character, enum.SealsOfWartornFate)
-end
-
-local function _GetBfADubloons(character)
-	return _GetCurrencyTotals(character, enum.SeafarersDubloon)
-end
-
-local function _GetBfAWarSupplies(character)
-	return _GetCurrencyTotals(character, enum.BfAWarSupplies)
-end
-
-local function _GetBfARichAzerite(character)
-	return _GetCurrencyTotals(character, enum.RichAzeriteFragment)
-end
-
-local function _GetBfACoalescingVisions(character)
-	return _GetCurrencyTotals(character, enum.CoalescingVisions)
-end
-
-local function _GetBfATitanResiduum(character)
-	return _GetCurrencyTotals(character, enum.TitanResiduum)
-end
-
-local function _GetRedeemedSouls(character)
-	return _GetCurrencyTotals(character, enum.RedeemedSoul)
-end
-
-local function _GetReservoirAnima(character)
-	return _GetCurrencyTotals(character, enum.ReservoirAnima)
-end
-
-
-local PublicMethods = {
-	GetCurrencyHeaders = _GetCurrencyHeaders,
-	GetNumCurrencies = _GetNumCurrencies,
-	GetCurrencyInfo = _GetCurrencyInfo,
-	GetCurrencyInfoByName = _GetCurrencyInfoByName,
-	GetCurrencyItemCount = _GetCurrencyItemCount,
-	GetArcheologyCurrencyInfo = _GetArcheologyCurrencyInfo,
-	GetCurrencyTotals = _GetCurrencyTotals,
-	GetJusticePoints = _GetJusticePoints,
-	GetValorPoints = _GetValorPoints,
-	GetValorPointsPerWeek = _GetValorPointsPerWeek,
-	GetApexisCrystals = _GetApexisCrystals,
-	GetGarrisonResources = _GetGarrisonResources,
-	GetSealsOfFate = _GetSealsOfFate,
-	GetSealsOfBrokenFate = _GetSealsOfBrokenFate,
-	GetOrderHallResources = _GetOrderHallResources,
-	GetNethershards = _GetNethershards,
-	GetWarSupplies = _GetWarSupplies,
-	GetBfAWarResources = _GetBfAWarResources,
-	GetBfASealsOfWartornFate = _GetBfASealsOfWartornFate,
-	GetBfADubloons = _GetBfADubloons,
-	GetBfAWarSupplies = _GetBfAWarSupplies,
-	GetBfARichAzerite = _GetBfARichAzerite,
-	GetBfACoalescingVisions = _GetBfACoalescingVisions,
-	GetBfATitanResiduum = _GetBfATitanResiduum,
-	GetRedeemedSouls = _GetRedeemedSouls,
-	GetReservoirAnima = _GetReservoirAnima,
-}
-
-if WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE then
-	-- if we're not in retail, overwrite the whole table
-	PublicMethods = {
-		GetNumCurrencies = _GetNumCurrencies,
-		GetCurrencyInfo = _GetCurrencyInfo_Wrath,
-		GetCurrencyInfoByName = _GetCurrencyInfoByName_Wrath,
-		GetCurrencyItemCount = _GetCurrencyItemCount_Wrath,
-	}
-end
-
-function addon:OnInitialize()
-	addon.db = LibStub("AceDB-3.0"):New(addonName .. "DB", AddonDB_Defaults)
-
-	DataStore:RegisterModule(addonName, addon, PublicMethods)
+	thisCharacter = DataStore:GetCharacterDB("DataStore_Currencies_Characters", true)
+	thisCharacter.Currencies = thisCharacter.Currencies or {}
 	
-	DataStore:SetCharacterBasedMethod("GetNumCurrencies")
-	DataStore:SetCharacterBasedMethod("GetCurrencyInfo")
-	DataStore:SetCharacterBasedMethod("GetCurrencyInfoByName")
-	DataStore:SetCharacterBasedMethod("GetCurrencyItemCount")
+	thisCharacterArcheology = DataStore:GetCharacterDB("DataStore_Currencies_Archeology", true)
+	
+	currenciesCatalog = DataStore:CreateSetAndList(DataStore_Currencies_Catalog)
+	currenciesHeaders = DataStore:CreateSetAndList(DataStore_Currencies_Headers)
+	
+	currenciesInfo = DataStore_Currencies_Info
+	currenciesMax = DataStore_Currencies_Max	
 	
 	-- Stop here for non-retail
-	if WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE then return end
+	if not isRetail then return end
 	
-	DataStore:SetCharacterBasedMethod("GetArcheologyCurrencyInfo")
-	DataStore:SetCharacterBasedMethod("GetCurrencyTotals")
-	DataStore:SetCharacterBasedMethod("GetJusticePoints")
-	DataStore:SetCharacterBasedMethod("GetValorPoints")
-	DataStore:SetCharacterBasedMethod("GetValorPointsPerWeek")
-	DataStore:SetCharacterBasedMethod("GetApexisCrystals")
-	DataStore:SetCharacterBasedMethod("GetGarrisonResources")
-	DataStore:SetCharacterBasedMethod("GetSealsOfFate")
-	DataStore:SetCharacterBasedMethod("GetSealsOfBrokenFate")
-	DataStore:SetCharacterBasedMethod("GetOrderHallResources")
-	DataStore:SetCharacterBasedMethod("GetNethershards")
-	DataStore:SetCharacterBasedMethod("GetWarSupplies")
-	DataStore:SetCharacterBasedMethod("GetBfAWarResources")
-	DataStore:SetCharacterBasedMethod("GetBfASealsOfWartornFate")
-	DataStore:SetCharacterBasedMethod("GetBfADubloons")
-	DataStore:SetCharacterBasedMethod("GetBfAWarSupplies")
-	DataStore:SetCharacterBasedMethod("GetBfARichAzerite")
-	DataStore:SetCharacterBasedMethod("GetBfACoalescingVisions")
-	DataStore:SetCharacterBasedMethod("GetBfATitanResiduum")
-	DataStore:SetCharacterBasedMethod("GetRedeemedSouls")
-	DataStore:SetCharacterBasedMethod("GetReservoirAnima")
-end
+	DataStore:RegisterMethod(addon, "GetCurrencyHeaders", _GetCurrencyHeaders)
+end)
 
-function addon:OnEnable()
-	addon:RegisterEvent("PLAYER_ALIVE", OnPlayerAlive)
-	addon:RegisterEvent("CURRENCY_DISPLAY_UPDATE", OnCurrencyDisplayUpdate)
+DataStore:OnPlayerLogin(function()
+	addon:ListenTo("PLAYER_ALIVE", OnPlayerAlive)
+	addon:ListenTo("CURRENCY_DISPLAY_UPDATE", OnCurrencyDisplayUpdate)
 	
 	-- Stop here for non-retail
-	if WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE then return end
+	if not isRetail then return end
 	
-	addon:RegisterEvent("CHAT_MSG_SYSTEM", OnChatMsgSystem)
-	addon:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", OnCovenantSanctumInteractionStarted)
-	
-	local _, _, arch = GetProfessions()
-
-	if arch and RequestArtifactCompletionHistory then
-		--	ARTIFACT_HISTORY_READY deprecated in 8.0
-		-- addon:RegisterEvent("ARTIFACT_HISTORY_READY", OnArtifactHistoryReady)
-		RequestArtifactCompletionHistory()		-- this will trigger ARTIFACT_HISTORY_READY
-	end
-end
-
-function addon:OnDisable()
-	addon:UnregisterEvent("PLAYER_ALIVE")
-	addon:UnregisterEvent("CURRENCY_DISPLAY_UPDATE")
-	
-	-- Stop here for non-retail
-	if WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE then return end
-	
-	addon:UnregisterEvent("CHAT_MSG_SYSTEM")
-	addon:UnregisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
-end
+	addon:ListenTo("CHAT_MSG_SYSTEM", OnChatMsgSystem)
+	addon:ListenTo("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", OnCovenantSanctumInteractionStarted)
+end)
