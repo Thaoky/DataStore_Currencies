@@ -168,7 +168,7 @@ local function ScanCurrencies_NonRetail()
 		name = name or ""
 		if isHeader then
 			-- currencies[i] = format("0|%s", name)
-			categoryIndex = RegisterHeader(info.name)
+			categoryIndex = RegisterHeader(name)
 		else
 			-- currencies[i] = format("1|%s|%d|%d", name, count or 0, itemID or 0)
 			
@@ -363,14 +363,16 @@ local function _GetCurrencyItemCount_NonRetail(character, searchedID)
 end
 
 local function _GetCurrencyTotals(character, id)
-	local info = character.Totals[id]
-	local maxInfo = currenciesMax[id]
-	
-	if info and maxInfo then
-		return bit64:GetBits(info, 0, 20),		-- bits 0-19 = quantity
-			bit64:RightShift(info, 20),			-- bits 20+ = quantity earned this week	
-			bit64:GetBits(maxInfo, 0, 20),		-- bits 0-19 = max quantity
-			bit64:RightShift(maxInfo, 20)			-- bits 20+ = max quantity per week
+	if character.Totals then
+		local info = character.Totals[id]
+		local maxInfo = currenciesMax[id]
+		
+		if info and maxInfo then
+			return bit64:GetBits(info, 0, 20),		-- bits 0-19 = quantity
+				bit64:RightShift(info, 20),			-- bits 20+ = quantity earned this week	
+				bit64:GetBits(maxInfo, 0, 20),		-- bits 0-19 = max quantity
+				bit64:RightShift(maxInfo, 20)			-- bits 20+ = max quantity per week
+		end
 	end
 	
 	return 0, 0, 0, 0
