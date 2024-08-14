@@ -20,6 +20,8 @@ local isRetail = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
 local enum = DataStore.Enum.CurrencyIDs
 local bit64 = LibStub("LibBit64")
 
+local accountWideCurrencies = {}
+
 local headersState
 local headerCount
 
@@ -128,6 +130,7 @@ local function ScanCurrencies_Retail()
 	
 	local char = thisCharacter
 	wipe(char.Currencies)
+	if char.Totals then wipe(char.Totals) end
 	
 	local categoryIndex = 0
 	
@@ -231,9 +234,17 @@ local function OnCurrencyDisplayUpdate()
 	end
 end
 
+
+local sourceGUID
+
 local function OnCurrencyTransferLogUpdate()
+	-- Don't even bother if the PreClick did not provide a proper GUID
+	if not sourceGUID then return end
+
 	-- When the transfer log is updated, only update the count of the sender.
 	-- The receiver is the current character, and is already handled above.
+	-- Problem : the transaction log's most recent entry does not contain the source character GUID, hence the HookScript on the confirm button.
+	-- Tested with characters on the same realm, connected realm, different realm, different subscription on the same account, all are invalid.
 	local transferLog = C_CurrencyInfo.FetchCurrencyTransferTransactions()
 	if not transferLog then return end
 	
@@ -255,20 +266,7 @@ local function OnCurrencyTransferLogUpdate()
 	
 	if not lastOp then return end
 	
-	-- Get the sender's GUID
-	-- for k, v in pairs(lastOp) do
-		-- if type(v) == "string" then
-			-- print(k .. ": " .. v)
-		-- end
-	-- end
-	
-	local guid = lastOp.sourceCharacterGUID
-	if not guid then return end
-	-- print("guid: " .. guid)
-	
-	--	Get the sender's index in the database
-	local index = DataStore:GetCharacterIDByGUID(guid)
-	-- print("index by guid: " .. index)
+	local index = DataStore:GetCharacterIDByGUID(sourceGUID)
 	if not index then return end
 
 	local info = C_CurrencyInfo.GetBasicCurrencyInfo(lastOp.currencyType)
@@ -284,18 +282,17 @@ local function OnCurrencyTransferLogUpdate()
 
 			-- When the matching currency is found, update its count
 			if name == transferredCurrencyName then
-				-- print("name: " .. name)
+				-- Get the old count
 				local count = bit64:RightShift(currency, 18)					-- bits 18+ : Item count
-				-- print("count: " .. count)
-				-- print("quantityTransferred: " .. lastOp.quantityTransferred)
-				-- print("totalQuantityConsumed: " .. lastOp.totalQuantityConsumed)
 				local newCount = count - lastOp.totalQuantityConsumed
 				local categoryIndex = bit64:GetBits(currency, 0, 8)		-- bit  0-7 : parent category index, 8 bits = 256 values
-				-- print("newCount: " .. newCount)
 			
-				-- senderDB.Currencies[k] = categoryIndex							-- bit  0-7 : parent category index, 8 bits = 256 values
-					-- + bit64:LeftShift(currencyIndex, 8)							-- bits 8-17 : currency index, 10 bits = 1024 values
-					-- + bit64:LeftShift(newCount, 18)								-- bits 18+ : Item count				
+				-- Then update it with the new data.
+				senderDB.Currencies[k] = categoryIndex							-- bit  0-7 : parent category index, 8 bits = 256 values
+					+ bit64:LeftShift(currencyIndex, 8)							-- bits 8-17 : currency index, 10 bits = 1024 values
+					+ bit64:LeftShift(newCount, 18)								-- bits 18+ : Item count				
+				
+				sourceGUID = nil
 				
 				return
 			end
@@ -491,6 +488,7 @@ DataStore:OnAddonLoaded(addonName, function()
 	if not isRetail then return end
 	
 	DataStore:RegisterMethod(addon, "GetCurrencyHeaders", _GetCurrencyHeaders)
+	DataStore:RegisterMethod(addon, "IsCurrencyAccountWide", function(currencyName) return accountWideCurrencies[currencyName] end)
 end)
 
 DataStore:OnPlayerLogin(function()
@@ -501,6 +499,28 @@ DataStore:OnPlayerLogin(function()
 	if not isRetail then return end
 	
 	addon:ListenTo("CHAT_MSG_SYSTEM", OnChatMsgSystem)
-	-- addon:ListenTo("CURRENCY_TRANSFER_LOG_UPDATE", OnCurrencyTransferLogUpdate)
+	addon:ListenTo("CURRENCY_TRANSFER_LOG_UPDATE", OnCurrencyTransferLogUpdate)
 	addon:ListenTo("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", OnCovenantSanctumInteractionStarted)
+	
+	-- Get the names of account wide currencies
+	local currencyIDs = {
+		2032,			-- Trader's Tender
+	}
+	
+	for _, currencyID in pairs(currencyIDs) do
+		local currency = C_CurrencyInfo.GetCurrencyInfo(2032)
+		if currency and currency.name then
+			accountWideCurrencies[currency.name] = true
+		end
+	end
+	
+	-- Hook the Confirm button to get the sourceGUID BEFORE the transfer occurs.
+	CurrencyTransferMenu.ConfirmButton:HookScript("PreClick", function(self) 
+		local data = CurrencyTransferMenu:GetSourceCharacterData()
+	
+		if data then
+			sourceGUID = data.characterGUID
+		end
+	end)	
+	
 end)

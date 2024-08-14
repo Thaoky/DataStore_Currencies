@@ -97,4 +97,19 @@ enum.CurrencyIDs = {
 	EmeraldDewdrop = 2650,
 	DreamInfusion = 2777,
 	MysteriousFragment = 2657, -- This is the only currency so far, didn't want to place in a separate tab
+	
+	-- War Within 11.0
+	Undercoin = 2803,
+	ResonanceCrystals = 2815,
+	WeatheredHarbingerCrest = 2914,
+	CarvedHarbingerCrest = 2915,
+	RunedHarbingerCrest = 2916,
+	GildedHarbingerCrest = 2917,
+	Valorstones = 3008,
+	MereldarDerbyMark = 3055,
+	Kej = 3056,
+	ResidualMemories = 3089,
+	NerubArFinery = 3093,
+	RestoredCofferKey = 3028,
+	
 }
