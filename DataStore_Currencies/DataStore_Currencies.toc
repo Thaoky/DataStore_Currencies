@@ -4,7 +4,7 @@
 
 ## Notes: Stores information about character currencies
 ## Author: Thaoky (EU-Marécages de Zangar)
-## Version: 2024.08.14
+## Version: 2024.08.25
 ## Dependencies: DataStore
 ## SavedVariables: DataStore_Currencies_Characters, DataStore_Currencies_Catalog, DataStore_Currencies_Info, DataStore_Currencies_Max, DataStore_Currencies_Headers, DataStore_Currencies_Archeology 
 ## X-Category: Interface Enhancements
