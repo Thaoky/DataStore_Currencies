@@ -111,5 +111,6 @@ enum.CurrencyIDs = {
 	ResidualMemories = 3089,
 	NerubArFinery = 3093,
 	RestoredCofferKey = 3028,
+	BronzeCelebration = 3100,
 	
 }

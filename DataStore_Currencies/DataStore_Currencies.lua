@@ -125,6 +125,49 @@ local function ScanCurrencyTotals(id)
 		+ bit64:LeftShift(info.maxWeeklyQuantity, 20)		-- bits 20+ = max quantity per week
 end
 
+local professionTrackers = {
+	[3057] = true,		-- 11.0 Profession Tracker - Alchemy
+	[3058] = true,		-- 11.0 Profession Tracker - Blacksmithing
+	[3059] = true,		-- 11.0 Profession Tracker - Enchanting
+	[3060] = true,		-- 11.0 Profession Tracker - Engineering
+	[3061] = true,		-- 11.0 Profession Tracker - Herbalism
+	[3062] = true,		-- 11.0 Profession Tracker - Inscription
+	[3063] = true,		-- 11.0 Profession Tracker - Jewelcrafting
+	[3064] = true,		-- 11.0 Profession Tracker - Leatherworking
+	[3065] = true,		-- 11.0 Profession Tracker - Mining
+	[3066] = true,		-- 11.0 Profession Tracker - Skinning
+	[3067] = true,		-- 11.0 Profession Tracker - Tailoring
+}
+
+local hiddenCurrencies = {
+	[2785] = 3057,		-- Khaz Algar Alchemy Knowledge
+	[2786] = 3058,		-- Khaz Algar Blacksmithing Knowledge
+	[2787] = 3059,		-- Khaz Algar Enchanting Knowledge
+	[2788] = 3060,		-- Khaz Algar Engineering Knowledge
+	[2789] = 3061,		-- Khaz Algar Herbalism Knowledge
+	[2790] = 3062,		-- Khaz Algar Inscription Knowledge
+	[2791] = 3063,		-- Khaz Algar Jewelcrafting Knowledge
+	[2792] = 3064,		-- Khaz Algar Leatherworking Knowledge
+	[2793] = 3065,		-- Khaz Algar Mining Knowledge
+	[2794] = 3066,		-- Khaz Algar Skinning Knowledge
+	[2795] = 3067,		-- Khaz Algar Tailoring Knowledge
+}
+
+local function ScanHiddenCurrency(currencyID)
+	local trackerCurrencyID = hiddenCurrencies[currencyID]
+	-- exit if currency is unkown
+	if not trackerCurrencyID then return end
+	
+	local info = C_CurrencyInfo.GetCurrencyInfo(trackerCurrencyID)
+	if not info then return end
+	
+	local categoryIndex = RegisterHeader("Hidden")
+	local currencyIndex = RegisterCurrency(info.name, info.iconFileID)
+	
+	SaveCurrency(categoryIndex, currencyIndex, info.quantity)
+	ScanCurrencyTotals(trackerCurrencyID)
+end
+
 local function ScanCurrencies_Retail()
 	SaveHeaders_Retail()
 	
@@ -226,7 +269,9 @@ local function OnPlayerAlive()
 	ScanCurrencies()
 end
 
-local function OnCurrencyDisplayUpdate()
+local function OnCurrencyDisplayUpdate(event, currencyID)
+	if isRetail then ScanHiddenCurrency(currencyID) end
+
 	ScanCurrencies()
 	
 	if isRetail then
