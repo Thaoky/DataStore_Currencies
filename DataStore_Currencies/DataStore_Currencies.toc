@@ -1,11 +1,11 @@
-## Interface: 110005, 40400
+## Interface: 110007, 40400
 ## Title: DataStore_Currencies
 ## IconTexture: Interface\Icons\garrison_building_storehouse
 
 ## Notes: Stores information about character currencies
 ## Author: Thaoky (EU-Marécages de Zangar)
-## Version: 2024.11.11
-## Dependencies: DataStore
+## Version: 2024.12.22
+## Dependencies: AddonFactory, DataStore
 ## SavedVariables: DataStore_Currencies_Characters, DataStore_Currencies_Catalog, DataStore_Currencies_Info, DataStore_Currencies_Max, DataStore_Currencies_Headers, DataStore_Currencies_Archeology 
 ## X-Category: Interface Enhancements
 
