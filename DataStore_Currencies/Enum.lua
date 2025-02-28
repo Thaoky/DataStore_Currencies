@@ -112,5 +112,10 @@ enum.CurrencyIDs = {
 	NerubArFinery = 3093,
 	RestoredCofferKey = 3028,
 	BronzeCelebration = 3100,
-	
+
+	-- War Within 11.1
+	WeatheredUndermineCrest = 3107,
+	CarvedUndermineCrest = 3108,
+	RunedUndermineCrest = 3109,
+	GildedUndermineCrest = 3110,	
 }
