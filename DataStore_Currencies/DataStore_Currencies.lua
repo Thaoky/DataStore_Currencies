@@ -405,6 +405,7 @@ local function _GetCurrencyInfoByName(character, token)
 			return name, count, info, category
 		end
 	end
+	return token, nil, currenciesInfo[currenciesCatalog.Set[token]], nil
 end
 
 -- normally not necessary anymore, needs testing
