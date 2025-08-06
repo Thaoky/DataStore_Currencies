@@ -561,7 +561,7 @@ AddonFactory:OnPlayerLogin(function()
 	end
 	
 	-- Hook the Confirm button to get the sourceGUID BEFORE the transfer occurs.
-	CurrencyTransferMenu.ConfirmButton:HookScript("PreClick", function(self) 
+	CurrencyTransferMenu.Content.ConfirmButton:HookScript("PreClick", function(self) 
 		local data = CurrencyTransferMenu:GetSourceCharacterData()
 	
 		if data then
@@ -570,3 +570,4 @@ AddonFactory:OnPlayerLogin(function()
 	end)	
 	
 end)
+
