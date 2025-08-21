@@ -118,4 +118,10 @@ enum.CurrencyIDs = {
 	CarvedUndermineCrest = 3108,
 	RunedUndermineCrest = 3109,
 	GildedUndermineCrest = 3110,	
+	
+	-- War Within 11.2
+	WeatheredEtherealCrest = 3284,
+	CarvedEtherealCrest = 3286,
+	RunedEtherealCrest = 3288,
+	GildedEtherealCrest = 3290,	
 }
