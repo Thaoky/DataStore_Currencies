@@ -405,6 +405,8 @@ local function _GetCurrencyInfoByName(character, token)
 			return name, count, info, category
 		end
 	end
+	
+	return token, nil, currenciesInfo[currenciesCatalog.Set[token]], nil
 end
 
 -- normally not necessary anymore, needs testing
@@ -560,7 +562,7 @@ AddonFactory:OnPlayerLogin(function()
 	end
 	
 	-- Hook the Confirm button to get the sourceGUID BEFORE the transfer occurs.
-	CurrencyTransferMenu.ConfirmButton:HookScript("PreClick", function(self) 
+	CurrencyTransferMenu.Content.ConfirmButton:HookScript("PreClick", function(self) 
 		local data = CurrencyTransferMenu:GetSourceCharacterData()
 	
 		if data then
