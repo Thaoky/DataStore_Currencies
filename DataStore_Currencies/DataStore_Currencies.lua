@@ -552,10 +552,11 @@ AddonFactory:OnPlayerLogin(function()
 	-- Get the names of account wide currencies
 	local currencyIDs = {
 		2032,			-- Trader's Tender
+		3292,			-- Infinite Knowledge
 	}
 	
 	for _, currencyID in pairs(currencyIDs) do
-		local currency = C_CurrencyInfo.GetCurrencyInfo(2032)
+		local currency = C_CurrencyInfo.GetCurrencyInfo(currencyID)
 		if currency and currency.name then
 			accountWideCurrencies[currency.name] = true
 		end
