@@ -232,7 +232,7 @@ local ScanCurrencies = isRetail and ScanCurrencies_Retail or ScanCurrencies_NonR
 
 local function ScanReservoirCurrencies()
 	-- ** 9.0 Anima Currency **
-	local currencyID = C_CovenantSanctumUI.GetAnimaInfo()
+	local currencyID = nil; if C_CovenantSanctumUI and C_CovenantSanctumUI.GetAnimaInfo then local ok, id = pcall(C_CovenantSanctumUI.GetAnimaInfo); if ok then currencyID = id end end; if not currencyID then return end
 	local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
 
 	local categoryIndex = RegisterHeader(EXPANSION_NAME8)		-- Get the category index for "Shadowlands"
