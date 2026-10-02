@@ -15,7 +15,9 @@ local currenciesMax
 local DataStore = DataStore
 local TableInsert, strsplit, tonumber, ipairs, C_CurrencyInfo = table.insert, strsplit, tonumber, ipairs, C_CurrencyInfo
 local GetCurrencyListSize, GetCurrencyListInfo, ExpandCurrencyList, GetNumArchaeologyRaces, GetArchaeologyRaceInfo = GetCurrencyListSize, GetCurrencyListInfo, ExpandCurrencyList, GetNumArchaeologyRaces, GetArchaeologyRaceInfo
-local isRetail = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
+local isRetail = AddonFactory.isRetail
+local isForever = AddonFactory.isForever
+local isMainline = isRetail or isForever
 
 local enum = DataStore.Enum.CurrencyIDs
 local bit64 = LibStub("LibBit64")
@@ -228,7 +230,7 @@ local function ScanCurrencies_NonRetail()
 	char.lastUpdate = time()
 end
 
-local ScanCurrencies = isRetail and ScanCurrencies_Retail or ScanCurrencies_NonRetail
+local ScanCurrencies = isMainline and ScanCurrencies_Retail or ScanCurrencies_NonRetail
 
 local function ScanReservoirCurrencies()
 	-- ** 9.0 Anima Currency **
@@ -281,7 +283,7 @@ local currencyScanPending
 local pendingHiddenIDs
 
 local function OnCurrencyDisplayUpdate(event, currencyID)
-	if isRetail and currencyID then
+	if isMainline and currencyID then
 		pendingHiddenIDs = pendingHiddenIDs or {}
 		pendingHiddenIDs[currencyID] = true
 	end
@@ -290,7 +292,7 @@ local function OnCurrencyDisplayUpdate(event, currencyID)
 	currencyScanPending = true
 	C_Timer.After(1, function()
 		currencyScanPending = nil
-		if isRetail and pendingHiddenIDs then
+		if isMainline and pendingHiddenIDs then
 			for id in pairs(pendingHiddenIDs) do
 				ScanHiddenCurrency(id)
 			end
@@ -299,6 +301,7 @@ local function OnCurrencyDisplayUpdate(event, currencyID)
 
 		ScanCurrencies()
 
+		-- retail only, not forever.
 		if isRetail then
 			ScanArcheology()
 		end
@@ -537,8 +540,8 @@ AddonFactory:OnAddonLoaded(addonName, function()
 				GetNumCurrencies = _GetNumCurrencies,
 				GetCurrencyInfo = _GetCurrencyInfo,
 				GetCurrencyInfoByName = _GetCurrencyInfoByName,
-				GetCurrencyItemCount = isRetail and _GetCurrencyItemCount_Retail or _GetCurrencyItemCount_NonRetail,
-				GetCurrencyTotals = isRetail and _GetCurrencyTotals,
+				GetCurrencyItemCount = isMainline and _GetCurrencyItemCount_Retail or _GetCurrencyItemCount_NonRetail,
+				GetCurrencyTotals = isMainline and _GetCurrencyTotals,
 			},
 			["DataStore_Currencies_Archeology"] = {
 				GetArcheologyCurrencyInfo = isRetail and function(character, index)
@@ -559,8 +562,8 @@ AddonFactory:OnAddonLoaded(addonName, function()
 	currenciesInfo = DataStore_Currencies_Info
 	currenciesMax = DataStore_Currencies_Max	
 	
-	-- Stop here for non-retail
-	if not isRetail then return end
+	-- Stop here for non-retail/forever
+	if not isMainline then return end
 	
 	DataStore:RegisterMethod(addon, "GetCurrencyHeaders", _GetCurrencyHeaders)
 	DataStore:RegisterMethod(addon, "IsCurrencyAccountWide", function(currencyName) return accountWideCurrencies[currencyName] end)
@@ -571,8 +574,8 @@ AddonFactory:OnPlayerLogin(function()
 	addon:ListenTo("PLAYER_ALIVE", OnPlayerAlive)
 	addon:ListenTo("CURRENCY_DISPLAY_UPDATE", OnCurrencyDisplayUpdate)
 	
-	-- Stop here for non-retail
-	if not isRetail then return end
+	-- Stop here for non-retail/forever
+	if not isMainline then return end
 	
 	addon:ListenTo("CHAT_MSG_SYSTEM", OnChatMsgSystem)
 	addon:ListenTo("CURRENCY_TRANSFER_LOG_UPDATE", OnCurrencyTransferLogUpdate)
